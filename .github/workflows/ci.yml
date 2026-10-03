@@ -23,6 +23,11 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:56321
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-publishable-key
+      - run: pnpm doctor:mobile
+      - run: pnpm build:mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:56321
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-publishable-key
 
   database-and-e2e:
     runs-on: ubuntu-latest
@@ -36,7 +41,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @nutreza/web exec playwright install --with-deps chromium
       - run: pnpm exec supabase start
         env:
           SUPABASE_DISABLE_TELEMETRY: "1"

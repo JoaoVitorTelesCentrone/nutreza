@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const DEMO_EMAIL = "demo@nutreza.local";
 const DEMO_PASSWORD = "DemoNutreza2026!";
 const DEMO_NAME = "Dra. Marina Alves";
+const PATIENT_EMAIL = "paciente@nutreza.local";
+const PATIENT_PASSWORD = "PacienteNutreza2026!";
 
 function loadEnv(path) {
   const values = {};
@@ -49,11 +51,12 @@ async function findOrInsert(client, table, filters, payload, label) {
   return assertResult(await client.from(table).insert(payload).select("*").single(), `${label} (criação)`);
 }
 
-const env = loadEnv(".env.local");
+const envPath = existsSync("apps/web/.env.local") ? "apps/web/.env.local" : ".env.local";
+const env = loadEnv(envPath);
 const url = env.NEXT_PUBLIC_SUPABASE_URL;
 const publicKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const secretKey = env.SUPABASE_SECRET_KEY;
-if (!url || !publicKey || !secretKey) throw new Error(".env.local não contém as credenciais locais do Supabase.");
+if (!url || !publicKey || !secretKey) throw new Error(`${envPath} não contém as credenciais locais do Supabase.`);
 
 const admin = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const userClient = createClient(url, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -224,6 +227,39 @@ for (const definition of patientDefinitions) {
 }
 const [ana, bruno, camila] = patients;
 
+const refreshedUsers = assertResult(await admin.auth.admin.listUsers({ page: 1, perPage: 1000 }), "listar contas de paciente");
+let patientUser = refreshedUsers.users.find((candidate) => candidate.email === PATIENT_EMAIL);
+if (!patientUser) {
+  const created = assertResult(
+    await admin.auth.admin.createUser({
+      email: PATIENT_EMAIL,
+      password: PATIENT_PASSWORD,
+      email_confirm: true,
+      user_metadata: { nome: ana.nome, tipo: "paciente" },
+    }),
+    "criar conta demo do paciente",
+  );
+  patientUser = created.user;
+} else {
+  const updated = assertResult(
+    await admin.auth.admin.updateUserById(patientUser.id, {
+      password: PATIENT_PASSWORD,
+      email_confirm: true,
+      user_metadata: { ...patientUser.user_metadata, nome: ana.nome, tipo: "paciente" },
+    }),
+    "atualizar conta demo do paciente",
+  );
+  patientUser = updated.user;
+}
+
+await findOrInsert(
+  admin,
+  "paciente_acesso",
+  { paciente_id: ana.id, user_id: patientUser.id },
+  { paciente_id: ana.id, clinica_id: clinic.id, user_id: patientUser.id, vinculado_por: user.id },
+  "vincular conta demo ao paciente",
+);
+
 await findOrInsert(
   userClient,
   "alergia",
@@ -332,31 +368,51 @@ if (!plan) {
     }).select("*").single(),
     "criar plano alimentar",
   );
-  const meal = assertResult(
-    await userClient.from("plano_refeicao").insert({
-      plano_id: plan.id,
+}
+const meal = await findOrInsert(
+  userClient,
+  "plano_refeicao",
+  { plano_id: plan.id, ordem: 1 },
+  { plano_id: plan.id, clinica_id: clinic.id, paciente_id: ana.id, nome: "Café da manhã", horario: "07:30", ordem: 1 },
+  "criar refeição do plano",
+);
+let food = assertResult(await userClient.from("alimento").select("id,nome").limit(1).maybeSingle(), "consultar alimento-base");
+if (!food) {
+  food = assertResult(
+    await userClient.from("alimento").insert({
       clinica_id: clinic.id,
-      paciente_id: ana.id,
-      nome: "Café da manhã",
-      horario: "07:30",
-      ordem: 1,
-    }).select("*").single(),
-    "criar refeição do plano",
+      nome: "Aveia em flocos",
+      grupo: "Cereais",
+      energia_kcal_100g: 394,
+      proteina_g_100g: 13.9,
+      carboidrato_g_100g: 66.6,
+      lipidios_g_100g: 8.5,
+      fibra_g_100g: 9.1,
+      sodio_mg_100g: 5,
+      dados_ausentes: [],
+      alergenicos: [],
+      created_by: user.id,
+    }).select("id,nome").single(),
+    "criar alimento-base demo",
   );
-  const food = assertResult(await admin.from("alimento").select("id,nome").limit(1).single(), "consultar alimento-base");
-  assertResult(
-    await userClient.from("plano_item").insert({
-      plano_id: plan.id,
-      refeicao_id: meal.id,
-      clinica_id: clinic.id,
-      paciente_id: ana.id,
-      ordem: 1,
-      alimento_id: food.id,
-      gramas: 100,
-      observacao: "Combinar com uma fruta e café sem açúcar.",
-    }),
-    "adicionar alimento ao plano",
-  );
+}
+await findOrInsert(
+  userClient,
+  "plano_item",
+  { plano_id: plan.id, refeicao_id: meal.id, ordem: 1 },
+  {
+    plano_id: plan.id,
+    refeicao_id: meal.id,
+    clinica_id: clinic.id,
+    paciente_id: ana.id,
+    ordem: 1,
+    alimento_id: food.id,
+    gramas: 100,
+    observacao: "Combinar com uma fruta e café sem açúcar.",
+  },
+  "adicionar alimento ao plano",
+);
+if (plan.status !== "aprovado") {
   plan = assertResult(
     await userClient.from("plano_alimentar").update({
       status: "aprovado",
@@ -366,6 +422,53 @@ if (!plan) {
     "aprovar plano alimentar",
   );
 }
+
+let questionnaire = assertResult(
+  await userClient.from("questionario").select("id").eq("clinica_id", clinic.id).eq("titulo", "Check-in semanal").maybeSingle(),
+  "consultar questionário demo",
+);
+if (!questionnaire) {
+  const questionnaireId = assertResult(
+    await userClient.rpc("create_questionnaire_draft", {
+      p_title: "Check-in semanal",
+      p_description: "Um acompanhamento rápido sobre energia, adesão e dificuldades da semana.",
+    }),
+    "criar questionário demo",
+  );
+  questionnaire = { id: questionnaireId };
+}
+let questionnaireVersion = assertResult(
+  await userClient.from("questionario_versao").select("id,status").eq("questionario_id", questionnaire.id).order("numero", { ascending: false }).limit(1).single(),
+  "consultar versão do questionário demo",
+);
+const existingQuestions = assertResult(
+  await userClient.from("questionario_questao").select("id").eq("versao_id", questionnaireVersion.id),
+  "consultar perguntas do questionário demo",
+);
+if (existingQuestions.length === 0) {
+  assertResult(
+    await userClient.from("questionario_questao").insert([
+      { versao_id: questionnaireVersion.id, clinica_id: clinic.id, ordem: 1, enunciado: "Como esteve sua energia nesta semana?", tipo: "escala", obrigatoria: true, configuracao: { minimo: 1, maximo: 5 } },
+      { versao_id: questionnaireVersion.id, clinica_id: clinic.id, ordem: 2, enunciado: "Qual foi sua maior dificuldade com o plano?", tipo: "texto_longo", obrigatoria: false, configuracao: {} },
+    ]),
+    "adicionar perguntas ao questionário demo",
+  );
+}
+if (questionnaireVersion.status !== "publicada") {
+  const publishedId = assertResult(
+    await userClient.rpc("publish_questionnaire", { p_questionnaire_id: questionnaire.id }),
+    "publicar questionário demo",
+  );
+  questionnaireVersion = { id: publishedId, status: "publicada" };
+}
+
+await findOrInsert(
+  userClient,
+  "questionario_atribuicao",
+  { paciente_id: ana.id, versao_id: questionnaireVersion.id },
+  { clinica_id: clinic.id, paciente_id: ana.id, versao_id: questionnaireVersion.id, atribuida_por: user.id },
+  "atribuir questionário demo",
+);
 
 const charges = [
   { patient: ana, reference: `demo-${clinic.id}-ana`, value: 28000, status: "recebida", description: "Consulta nutricional e plano alimentar" },
@@ -449,8 +552,8 @@ await findOrInsert(
 await userClient.auth.signOut();
 console.log(JSON.stringify({
   ok: true,
-  email: DEMO_EMAIL,
-  password: DEMO_PASSWORD,
+  web: { email: DEMO_EMAIL, password: DEMO_PASSWORD },
+  mobile: { email: PATIENT_EMAIL, password: PATIENT_PASSWORD },
   clinic: clinic.nome,
   patients: patients.length,
   appointments: appointments.length,

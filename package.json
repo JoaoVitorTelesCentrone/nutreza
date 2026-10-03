@@ -1,5 +1,5 @@
 {
-  "name": "nutreza",
+  "name": "nutreza-monorepo",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,49 +8,29 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:e2e": "bddgen && playwright test",
+    "dev": "pnpm --filter @nutreza/web dev",
+    "dev:web": "pnpm --filter @nutreza/web dev",
+    "dev:mobile": "pnpm --filter @nutreza/mobile start",
+    "build": "pnpm --filter @nutreza/web build",
+    "build:mobile": "pnpm --filter @nutreza/mobile exec expo export --platform android --output-dir dist",
+    "doctor:mobile": "expo-doctor apps/mobile",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm seed:foods && pnpm --filter @nutreza/web test:e2e",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
-    "db:test": "supabase test db"
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --local --schema public > packages/database/src/database.types.ts",
+    "seed:foods": "node scripts/import-foods.mjs --meta data/taco-4.source.json --data data/taco-4.jsonl",
+    "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "5.3.0",
-    "@radix-ui/react-slot": "1.3.3",
-    "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",
-    "class-variance-authority": "0.7.1",
-    "clsx": "2.1.1",
-    "livekit-client": "2.22.3",
-    "livekit-server-sdk": "2.19.1",
-    "lucide-react": "1.49.0",
-    "next": "16.3.8",
-    "pdf-lib": "1.17.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "tailwind-merge": "3.7.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
-    "@tailwindcss/postcss": "4.3.3",
-    "@testing-library/jest-dom": "7.0.1",
-    "@testing-library/react": "16.3.3",
-    "@types/node": "26.6.4",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.1",
-    "eslint": "9.39.1",
-    "eslint-config-next": "16.3.8",
-    "playwright-bdd": "9.2.1",
-    "supabase": "2.119.0",
-    "tailwindcss": "4.3.3",
-    "typescript": "5.9.3",
-    "vitest": "5.0.3"
+    "expo-doctor": "1.20.4",
+    "supabase": "2.119.0"
   }
 }

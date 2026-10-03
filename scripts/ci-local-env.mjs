@@ -9,7 +9,8 @@ const vars = Object.fromEntries(input.split(/\r?\n/).map((line) => {
 
 const url = vars.API_URL;
 const key = vars.PUBLISHABLE_KEY ?? vars.ANON_KEY;
-if (!url || !key || !process.env.GITHUB_ENV) {
-  throw new Error("Supabase local não retornou API_URL e chave pública.");
+const secret = vars.SECRET_KEY ?? vars.SERVICE_ROLE_KEY;
+if (!url || !key || !secret || !process.env.GITHUB_ENV) {
+  throw new Error("Supabase local não retornou URL, chave pública e chave secreta.");
 }
-appendFileSync(process.env.GITHUB_ENV, `NEXT_PUBLIC_SUPABASE_URL=${url}\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${key}\n`);
+appendFileSync(process.env.GITHUB_ENV, `NEXT_PUBLIC_SUPABASE_URL=${url}\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${key}\nSUPABASE_SECRET_KEY=${secret}\n`);

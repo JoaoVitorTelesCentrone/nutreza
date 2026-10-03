@@ -63,8 +63,22 @@ if (args.measures) {
     throw new Error("Repeated measure name for a food.");
   }
 }
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const secret = process.env.SUPABASE_SECRET_KEY;
+let localEnv = {};
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+  try {
+    const contents = await readFile("apps/web/.env.local", "utf8");
+    localEnv = Object.fromEntries(contents.split(/\r?\n/).flatMap((rawLine) => {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#") || !line.includes("=")) return [];
+      const at = line.indexOf("=");
+      return [[line.slice(0, at).trim(), line.slice(at + 1).trim().replace(/^['"]|['"]$/g, "")]];
+    }));
+  } catch {
+    // Production and CI provide these values directly.
+  }
+}
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? localEnv.NEXT_PUBLIC_SUPABASE_URL;
+const secret = process.env.SUPABASE_SECRET_KEY ?? localEnv.SUPABASE_SECRET_KEY;
 if (!url || !secret) throw new Error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY on the server.");
 const client = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
 const { data: existing, error: readError } = await client.from("alimento_fonte").select("id,arquivo_sha256,normalizado_sha256,medidas_sha256")

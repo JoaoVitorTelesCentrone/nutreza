@@ -1,6 +1,6 @@
 # Nutreza
 
-SaaS para consultórios de nutrição. As fases 1 a 6 do [plano](PLANO_IMPLEMENTACAO.md) estão implementadas localmente. A fase 4 inclui catálogo TACO, planos manuais, aprovação, PDF e visão básica do paciente; a carga TBCA depende da autorização comercial e do arquivo de origem. A fase 5 inclui cobranças Pix de pacientes via Asaas, pacotes, créditos, recibos, estornos e conciliação; para operar, configure as credenciais conforme [STATUS_FASE_5.md](STATUS_FASE_5.md). A fase 6 inclui a Teca profissional em modo simulado ou OpenAI, com guardas, fontes aprovadas, rascunhos e aprovação humana; consulte [STATUS_FASE_6.md](STATUS_FASE_6.md).
+Plataforma de gestão para nutricionistas com um único backend Supabase e dois clientes: aplicação web para o consultório e aplicativo Expo/React Native para o paciente. O repositório é um monorepo pnpm; o estado da fundação mobile está em [STATUS_MOBILE_FUNDACAO.md](STATUS_MOBILE_FUNDACAO.md).
 
 ## Requisitos
 
@@ -11,20 +11,41 @@ SaaS para consultórios de nutrição. As fases 1 a 6 do [plano](PLANO_IMPLEMENT
 
 ```powershell
 pnpm install --frozen-lockfile
-Copy-Item .env.example .env.local
+Copy-Item .env.example apps/web/.env.local
+Copy-Item apps/mobile/.env.example apps/mobile/.env.local
 $env:SUPABASE_DISABLE_TELEMETRY='1'
 pnpm db:start
 pnpm exec supabase status -o env
 ```
 
-Copie `API_URL` para `NEXT_PUBLIC_SUPABASE_URL` e `PUBLISHABLE_KEY` ou `ANON_KEY` para `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` em `.env.local`. Depois execute `pnpm dev` e abra `http://localhost:3000`. O Mailpit local usa a porta `56324` para confirmar contas e testar os fluxos de email.
+Copie `API_URL` e `PUBLISHABLE_KEY` (ou `ANON_KEY`) do Supabase para os dois arquivos de ambiente. Use os prefixos `NEXT_PUBLIC_` no web e `EXPO_PUBLIC_` no mobile. Depois execute `pnpm dev:web` para abrir o web em `http://localhost:3000` ou `pnpm dev:mobile` para iniciar o Expo. Em um celular físico, troque `127.0.0.1` pelo IP da máquina na rede local. O Mailpit local usa a porta `56324`.
+
+Para popular o ambiente com dados fictícios:
+
+```powershell
+pnpm seed:demo
+```
+
+- Web: `demo@nutreza.local` / `DemoNutreza2026!`
+- Mobile: `paciente@nutreza.local` / `PacienteNutreza2026!`
+
+A conta mobile está vinculada à paciente Ana Carolina e recebe um plano aprovado e um questionário de check-in.
+
+## Aplicativo do paciente
+
+O app em `apps/mobile` já possui autenticação exclusiva para paciente, sessão segura, tela inicial, plano alimentar em linha do tempo, lista de questionários e perfil/logout. A segurança não depende das telas: as políticas RLS limitam cada paciente aos próprios vínculos e limitam nutricionistas aos pacientes sob sua responsabilidade.
+
+```powershell
+pnpm doctor:mobile
+pnpm build:mobile
+```
 
 ## Pacientes e prontuário
 
 - Em **Pacientes**, cadastre manualmente, busque pelo nome ou importe um CSV com até 100 linhas e cabeçalhos `nome;nascimento;sexo;email;telefone`. São aceitos `,` ou `;`; datas em `AAAA-MM-DD` ou `DD/MM/AAAA`.
 - No paciente, registre alergias, anamnese, medidas, consultas e documentos PDF/JPG/PNG de até 10 MB. Alergias ativas aparecem no cabeçalho do prontuário.
 - Anamnese e consultas são versionadas por inserção. Medidas são registros imutáveis. O histórico mostra alterações e acessos ao paciente.
-- Admin e profissional acessam dados clínicos; recepção acessa somente dados cadastrais. O paciente vinculado lê apenas seus próprios dados cadastrais nesta fase. A ativação da área do paciente pertence à fase 7.
+- Admin e profissional acessam dados clínicos; recepção acessa somente dados cadastrais. O paciente vinculado lê apenas seus próprios dados e conteúdos atribuídos.
 - Arquivos ficam em bucket privado. Downloads passam por verificação da clínica, papel e documento ativo.
 
 ## Agenda e consultas
@@ -55,6 +76,8 @@ pnpm test
 pnpm test:e2e
 $env:SUPABASE_DISABLE_TELEMETRY='1'; pnpm db:test
 pnpm build
+pnpm doctor:mobile
+pnpm build:mobile
 ```
 
 Os testes E2E exigem Supabase local e cobrem cadastro, importação CSV, prontuário, agenda, plano alimentar, aprovação, PDF, revisão e acesso do paciente. Os testes SQL verificam conflitos de horário, idempotência, cálculo nutricional, versões, fila de lembretes e RLS entre duas clínicas, recepção, profissional e paciente vinculado. `supabase db advisors --local` deve retornar sem alertas.
@@ -75,10 +98,12 @@ Staging e produção exigem projetos Supabase separados, credenciais e SMTP pró
 
 ## Estrutura
 
-- `src/app`: rotas e layouts Next.js.
-- `src/features/auth`, `src/features/pacientes` e `src/features/agenda`: validação, regras e ações.
-- `src/shared`: componentes e clientes Supabase.
+- `apps/web`: aplicação Next.js do nutricionista, incluindo testes unitários e E2E.
+- `apps/mobile`: aplicativo Expo/React Native do paciente.
+- `packages/database`: tipos gerados a partir do schema Supabase.
+- `packages/domain`: contratos e regras compartilhados.
+- `packages/validation`: schemas Zod compartilhados.
+- `packages/design-tokens`: cores, espaçamentos e raios da identidade Nutreza.
 - `supabase/migrations`: esquema, RLS e auditoria.
 - `supabase/tests/database`: testes de isolamento e permissões.
-- `tests/features`, `tests/steps`, `tests/e2e`: BDD e jornadas no navegador.
 - `.github/workflows/ci.yml`: verificações de qualidade e banco.

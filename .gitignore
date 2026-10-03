@@ -2,6 +2,9 @@ node_modules/
 .next/
 .next-e2e/
 .next-phase7-build/
+apps/mobile/dist/
+apps/mobile/dist-web/
+apps/mobile/.expo/
 coverage/
 playwright-report/
 test-results/
