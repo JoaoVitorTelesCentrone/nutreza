@@ -1,0 +1,1 @@
+-- A fase 1 não inclui dados clínicos de exemplo. Use o fluxo de cadastro no app.

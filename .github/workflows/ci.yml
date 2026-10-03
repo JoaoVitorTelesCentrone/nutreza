@@ -1,0 +1,59 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:56321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-publishable-key
+
+  database-and-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec supabase start
+        env:
+          SUPABASE_DISABLE_TELEMETRY: "1"
+      - name: Export local Supabase URL and public key
+        run: pnpm exec supabase status -o env | node scripts/ci-local-env.mjs
+        env:
+          SUPABASE_DISABLE_TELEMETRY: "1"
+      - run: pnpm db:test
+        env:
+          SUPABASE_DISABLE_TELEMETRY: "1"
+      - run: pnpm exec supabase db lint --local --level error
+        env:
+          SUPABASE_DISABLE_TELEMETRY: "1"
+      - run: pnpm exec supabase db advisors --local --type all --level warn
+        env:
+          SUPABASE_DISABLE_TELEMETRY: "1"
+      - name: Run browser tests
+        run: pnpm test:e2e
+        env:
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000

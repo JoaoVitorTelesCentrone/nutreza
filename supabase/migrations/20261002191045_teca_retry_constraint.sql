@@ -1,0 +1,2 @@
+alter table public.teca_execucao
+  drop constraint if exists teca_execucao_clinica_id_contexto_hash_tarefa_criado_por_key;

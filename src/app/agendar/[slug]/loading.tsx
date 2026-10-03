@@ -1,0 +1,1 @@
+export default function LoadingPublicAgenda() { return <main className="page-wrap py-10" role="status" aria-live="polite"><div className="h-9 w-64 animate-pulse rounded-xl bg-line"/><div className="card mt-6 h-80 animate-pulse bg-line"/><span className="sr-only">Carregando horários</span></main>; }

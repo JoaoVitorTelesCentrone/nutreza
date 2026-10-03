@@ -1,0 +1,17 @@
+node_modules/
+.next/
+.next-e2e/
+.next-phase7-build/
+coverage/
+playwright-report/
+test-results/
+.features-gen/
+.env*
+!.env.example
+!.env.test.example
+supabase/.branches/
+supabase/.profiles/
+supabase/.temp/
+*.tsbuildinfo
+.tmp/
+.firecrawl/

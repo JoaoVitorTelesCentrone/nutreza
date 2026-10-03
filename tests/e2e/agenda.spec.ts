@@ -1,0 +1,94 @@
+import { expect, test } from "@playwright/test";
+
+test("reserva pública, remarcação e consulta com evolução", async ({ page, request, browser }) => {
+  test.setTimeout(90_000);
+  const unique = Date.now();
+  const email = `agenda-${unique}@example.test`;
+  const slug = `agenda-${unique}`;
+  const future = new Date();
+  future.setUTCDate(future.getUTCDate() + 14);
+  const day = future.toISOString().slice(0, 10);
+  const weekday = future.getUTCDay() || 7;
+
+  await page.goto("/cadastro");
+  await page.getByLabel("Seu nome").fill("Ana Agenda");
+  await page.getByLabel("E-mail").fill(email);
+  await page.getByLabel("Senha").fill("SenhaSegura123!");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Criar conta" }).click();
+  await expect(page.getByRole("heading", { name: "Confira seu e-mail." })).toBeVisible();
+  let messageId: string | undefined;
+  await expect.poll(async () => {
+    const response = await request.get("http://127.0.0.1:56324/api/v1/messages");
+    const inbox = await response.json() as { messages: Array<{ ID: string; To: Array<{ Address: string }> }> };
+    messageId = inbox.messages.find((message) => message.To.some((to) => to.Address === email))?.ID;
+    return messageId;
+  }, { timeout: 20_000 }).toBeTruthy();
+  const messageResponse = await request.get(`http://127.0.0.1:56324/api/v1/message/${messageId}`);
+  const message = await messageResponse.json() as { HTML: string };
+  const confirmationUrl = message.HTML.match(/href="([^"]+\/auth\/confirm[^"]+)"/)?.[1]?.replaceAll("&amp;", "&");
+  expect(confirmationUrl).toBeTruthy();
+  await page.goto(confirmationUrl!);
+  await page.getByLabel("Nome do consultório").fill("Clínica Agenda");
+  await page.getByLabel("Seu nome profissional").fill("Ana Agenda");
+  await page.getByRole("button", { name: "Criar consultório" }).click();
+  await expect(page.getByRole("heading", { name: "Olá, Ana." })).toBeVisible();
+  await page.getByRole("link", { name: "Abrir agenda" }).click();
+  await page.getByRole("link", { name: "Disponibilidade" }).click();
+  await page.getByLabel("Endereço da agenda").fill(slug);
+  await page.getByRole("button", { name: "Salvar link público" }).click();
+  await expect(page.getByRole("status")).toContainText("Configuração salva");
+  await expect(page.getByRole("link", { name: /Abrir página de agendamento/ })).toBeVisible();
+  await page.getByLabel("Nome do serviço").fill("Consulta inicial");
+  await page.getByRole("button", { name: "Adicionar serviço" }).click();
+  await expect(page.getByText("Consulta inicial", { exact: true })).toBeVisible();
+  await page.getByLabel("Dia da semana").selectOption(String(weekday));
+  await page.getByRole("button", { name: "Adicionar horário" }).click();
+  await expect(page.getByText("09:00–18:00", { exact: false })).toBeVisible();
+
+  const publicContext = await browser.newContext({ baseURL: "http://127.0.0.1:3005" });
+  const publicPage = await publicContext.newPage();
+  await publicPage.setViewportSize({ width: 360, height: 780 });
+  await publicPage.goto(`/agendar/${slug}`);
+  await expect(publicPage.getByRole("heading", { name: "Escolha um horário para sua consulta" })).toBeVisible();
+  expect(await publicPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await publicPage.getByLabel("2. Dia").fill(day);
+  await publicPage.getByRole("button", { name: "Ver horários" }).click();
+  await expect(publicPage.getByRole("radio").first()).toBeVisible();
+  await publicPage.getByRole("radio").first().check();
+  await publicPage.getByLabel("Nome completo").fill("Maria Agenda");
+  await publicPage.getByRole("textbox", { name: "Email *" }).fill(`maria-${unique}@example.test`);
+  await publicPage.getByLabel("WhatsApp ou telefone").fill("11999998888");
+  await publicPage.getByLabel("Quero receber confirmação e lembretes").check();
+  await publicPage.getByRole("button", { name: "Solicitar horário" }).click();
+  await expect(publicPage.getByRole("heading", { name: "Solicitação recebida" })).toBeVisible();
+  const publicUrl = publicPage.url();
+  const [calendar] = await Promise.all([publicPage.waitForEvent("download"), publicPage.getByRole("link", { name: "Adicionar ao calendário" }).click()]);
+  expect(calendar.suggestedFilename()).toBe("consulta.ics");
+
+  await page.goto(new URL(`/app/agenda?data=${day}&visao=dia`, page.url()).toString());
+  await page.getByRole("link", { name: /Maria Agenda/ }).click();
+  await page.getByRole("button", { name: "Confirmar consulta" }).click();
+  await expect(page.getByText("Confirmado", { exact: true })).toBeVisible();
+  await publicPage.goto(publicUrl);
+  await expect(publicPage.getByRole("heading", { name: "Consulta confirmada" })).toBeVisible();
+  await publicPage.getByRole("radio").first().check();
+  await publicPage.getByRole("button", { name: "Solicitar remarcação" }).click();
+  await expect(publicPage.getByRole("heading", { name: "Solicitação recebida" })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Confirmar consulta" }).click();
+  await page.getByRole("button", { name: "Iniciar consulta" }).click();
+  await page.getByLabel("Queixa e relato").fill("Primeira avaliação agendada");
+  await page.getByRole("button", { name: "Salvar evolução" }).click();
+  await expect(page.getByText("Versão 1", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Concluir consulta" }).click();
+  await expect(page.getByRole("link", { name: "Agendar retorno" })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 780 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await publicContext.close();
+});
+
+test("processador de lembretes exige credencial", async ({ request }) => {
+  const response = await request.get("/api/jobs/agenda-reminders");
+  expect(response.status()).toBe(401);
+});

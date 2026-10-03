@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/jobs/agenda-reminders", "schedule": "*/15 * * * *" },
+    { "path": "/api/jobs/finance-reconcile", "schedule": "*/15 * * * *" },
+    { "path": "/api/jobs/whatsapp-reminders", "schedule": "*/30 * * * *" },
+    { "path": "/api/jobs/whatsapp-checkins", "schedule": "*/30 * * * *" },
+    { "path": "/api/jobs/whatsapp-outbox", "schedule": "*/5 * * * *" }
+  ]
+}

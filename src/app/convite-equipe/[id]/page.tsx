@@ -1,0 +1,3 @@
+import { acceptTeamInvite } from "@/features/gestao/application/actions";
+
+export default async function TeamInvitePage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{erro?:string}>}){const {id}=await params;const {erro}=await searchParams;return <main className="page-wrap max-w-xl py-16"><section className="card"><h1 className="text-3xl font-bold">Entrar na equipe</h1><p className="mt-3 text-muted">Confirme para usar sua conta nesta clínica com o papel definido pelo administrador.</p>{erro&&<p className="notice-error mt-4">O convite expirou ou o limite de equipe foi atingido.</p>}<form action={acceptTeamInvite.bind(null,id)}><button className="action-primary mt-6">Aceitar convite</button></form></section></main>}
